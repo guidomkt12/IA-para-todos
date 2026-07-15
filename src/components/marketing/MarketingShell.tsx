@@ -1,0 +1,14 @@
+import { Link, Outlet } from "react-router-dom";
+
+export function MarketingShell() {
+  return (
+    <div className="min-h-screen bg-[#f8f5ef] text-stone-950">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+        <Link to="/" className="text-xl font-black tracking-tight">BelaFlow</Link>
+        <nav className="hidden gap-6 text-sm text-stone-600 md:flex"><Link to="/recursos">Recursos</Link><Link to="/precos">Preços</Link><Link to="/privacidade">Privacidade</Link></nav>
+        <div className="flex gap-2"><Link className="rounded-full px-4 py-2 text-sm" to="/entrar">Entrar</Link><Link className="rounded-full bg-stone-950 px-4 py-2 text-sm text-white" to="/cadastro">Começar</Link></div>
+      </header>
+      <Outlet />
+    </div>
+  );
+}

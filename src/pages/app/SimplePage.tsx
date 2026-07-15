@@ -1,0 +1,3 @@
+export default function SimplePage({ title, description }: { title: string; description: string }) {
+  return <div className="rounded-3xl bg-white p-8"><h2 className="text-3xl font-black">{title}</h2><p className="mt-3 max-w-2xl text-stone-500">{description}</p></div>;
+}

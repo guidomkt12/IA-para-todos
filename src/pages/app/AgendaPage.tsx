@@ -1,0 +1,14 @@
+import { FormEvent, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyState } from "@/components/app/EmptyState";
+import { createAppointment, createCustomerFromPhone, getActiveOrganization, loadDashboardData } from "@/lib/beauty/repository";
+
+export default function AgendaPage() {
+  const queryClient = useQueryClient();
+  const organization = useQuery({ queryKey: ["org"], queryFn: getActiveOrganization });
+  const data = useQuery({ queryKey: ["agenda", organization.data?.id], enabled: Boolean(organization.data?.id), queryFn: () => loadDashboardData(organization.data.id) });
+  const [message, setMessage] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const customer = await createCustomerFromPhone(organization.data.id, String(form.get("phone")), String(form.get("name") || "Cliente")); await createAppointment(organization.data.id, { customer_id: customer.id, professional_id: String(form.get("professional_id")), service_id: String(form.get("service_id")), start_at: String(form.get("start_at")), source: "dashboard" }); await queryClient.invalidateQueries(); setMessage("Agendamento criado no Supabase com snapshots de preço e duração."); }
+  const model = data.data;
+  return <div className="grid gap-6 xl:grid-cols-[1fr_380px]"><section className="space-y-4"><h2 className="text-3xl font-black">Agenda</h2>{model?.appointments.length ? model.appointments.map((appointment: any) => <div className="rounded-3xl bg-white p-5" key={appointment.id}><strong>{new Date(appointment.start_at).toLocaleString("pt-BR")}</strong><p>{appointment.services?.name} · {appointment.professionals?.display_name}</p><span>{appointment.status}</span></div>) : <EmptyState title="Agenda vazia" description="Crie o primeiro agendamento usando dados reais de serviços e profissionais." />}</section><form onSubmit={submit} className="rounded-3xl bg-white p-5"><h3 className="font-bold">Novo agendamento</h3><input name="name" placeholder="Cliente" className="mt-3 w-full rounded-xl border p-3" /><input name="phone" required placeholder="Telefone" className="mt-3 w-full rounded-xl border p-3" /><select name="service_id" required className="mt-3 w-full rounded-xl border p-3">{model?.services.map((service: any) => <option value={service.id} key={service.id}>{service.name}</option>)}</select><select name="professional_id" required className="mt-3 w-full rounded-xl border p-3">{model?.professionals.map((professional: any) => <option value={professional.id} key={professional.id}>{professional.display_name}</option>)}</select><input name="start_at" required type="datetime-local" className="mt-3 w-full rounded-xl border p-3" /><button className="mt-4 rounded-full bg-stone-950 px-5 py-3 text-white">Criar</button>{message ? <p className="mt-3 text-sm text-emerald-700">{message}</p> : null}</form></div>;
+}
