@@ -1,0 +1,69 @@
+{
+  "name": "Beauty SaaS - WhatsApp Webhook Ingest",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "beauty/whatsapp-webhook/:connectionId", "responseMode": "responseNode" },
+      "id": "webhook-whatsapp",
+      "name": "Webhook - Provider Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst headers = $json.headers || {};\nconst connectionId = $json.params?.connectionId || body.connectionId;\nif (!connectionId) throw new Error('connection_required');\nconst eventId = body.eventId || body.id || body.message?.id;\nif (!eventId) throw new Error('event_required');\nreturn [{ json: { connectionId, eventId, payload: body, headers, received_at: new Date().toISOString() } }];"
+      },
+      "id": "normalize-event",
+      "name": "Normalize Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "whatsapp_webhook_events",
+        "updateKey": "eventId",
+        "fields": "connectionId,eventId,payload,received_at",
+        "upsert": true
+      },
+      "id": "mongo-upsert-event",
+      "name": "MongoDB Upsert Raw Event",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [500, 0],
+      "credentials": { "mongoDb": { "id": "REPLACE_WITH_N8N_MONGODB_CREDENTIAL_ID", "name": "MongoDB Beauty SaaS" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/whatsapp-webhook/' + $json.connectionId }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SIGNING_SECRET }}" }, { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ $json.payload }}"
+      },
+      "id": "call-supabase-webhook",
+      "name": "Call Supabase Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [760, 0]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { ok: true, eventId: $json.eventId } }}" },
+      "id": "respond-webhook",
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1020, 0]
+    }
+  ],
+  "connections": {
+    "Webhook - Provider Event": { "main": [[{ "node": "Normalize Event", "type": "main", "index": 0 }]] },
+    "Normalize Event": { "main": [[{ "node": "MongoDB Upsert Raw Event", "type": "main", "index": 0 }]] },
+    "MongoDB Upsert Raw Event": { "main": [[{ "node": "Call Supabase Webhook", "type": "main", "index": 0 }]] },
+    "Call Supabase Webhook": { "main": [[{ "node": "Respond Webhook", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

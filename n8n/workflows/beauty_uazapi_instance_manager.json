@@ -1,0 +1,68 @@
+{
+  "name": "Beauty SaaS - UAZAPI Instance Manager",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "beauty/uazapi-instance", "responseMode": "responseNode" },
+      "id": "webhook-instance",
+      "name": "Webhook - Instance Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const secret = $env.N8N_SHARED_SECRET || '';\nconst provided = $json.headers?.['x-internal-secret'] || $json.headers?.['X-Internal-Secret'] || '';\nif (secret && provided !== secret) throw new Error('unauthorized');\nconst body = $json.body || $json;\nconst allowed = ['create','status','pairing','configure_webhook','disconnect','delete'];\nif (!allowed.includes(body.action)) throw new Error('invalid_action');\nif (!body.organization_id) throw new Error('organization_required');\nconst instanceId = body.instance_id || body.external_instance_id || `${body.organization_id}-${Date.now()}`;\nreturn [{ json: { ...body, instance_id: instanceId, idempotency_key: `${body.organization_id}:${body.action}:${instanceId}` } }];"
+      },
+      "id": "validate-instance",
+      "name": "Validate Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.UAZAPI_BASE_URL + '/instance/' + $json.action }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.UAZAPI_ADMIN_TOKEN }}" }] },
+        "sendBody": true,
+        "bodyParameters": { "parameters": [{ "name": "instanceId", "value": "={{ $json.instance_id }}" }, { "name": "name", "value": "={{ $json.instance_name || 'WhatsApp' }}" }, { "name": "webhookUrl", "value": "={{ $json.webhook_url }}" }] }
+      },
+      "id": "call-uazapi",
+      "name": "Call UAZAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 0]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "whatsapp_instances",
+        "updateKey": "idempotency_key",
+        "fields": "idempotency_key,organization_id,instance_id,action,instance_name,webhook_url,uazapi_response,updated_at",
+        "upsert": true
+      },
+      "id": "mongo-upsert-instance",
+      "name": "MongoDB Upsert Instance",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [760, 0],
+      "credentials": { "mongoDb": { "id": "REPLACE_WITH_N8N_MONGODB_CREDENTIAL_ID", "name": "MongoDB Beauty SaaS" } }
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { ok: true, instanceId: $json.instance_id, status: $json.uazapi_response?.status || 'requested', qrcode: $json.uazapi_response?.qrcode, pairingCode: $json.uazapi_response?.pairingCode } }}" },
+      "id": "respond-instance",
+      "name": "Respond Instance",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1020, 0]
+    }
+  ],
+  "connections": {
+    "Webhook - Instance Action": { "main": [[{ "node": "Validate Action", "type": "main", "index": 0 }]] },
+    "Validate Action": { "main": [[{ "node": "Call UAZAPI", "type": "main", "index": 0 }]] },
+    "Call UAZAPI": { "main": [[{ "node": "MongoDB Upsert Instance", "type": "main", "index": 0 }]] },
+    "MongoDB Upsert Instance": { "main": [[{ "node": "Respond Instance", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

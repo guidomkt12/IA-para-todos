@@ -1,0 +1,64 @@
+{
+  "name": "Beauty SaaS - Mongo User Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "beauty/mongo-user-sync",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-user-sync",
+      "name": "Webhook - User Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const secret = $env.N8N_SHARED_SECRET || '';\nconst provided = $json.headers?.['x-internal-secret'] || $json.headers?.['X-Internal-Secret'] || '';\nif (secret && provided !== secret) throw new Error('unauthorized');\nconst body = $json.body || $json;\nif (!body.organization?.id || !body.user?.id) throw new Error('invalid_payload');\nreturn [{ json: { ...body, synced_at: new Date().toISOString() } }];"
+      },
+      "id": "validate-payload",
+      "name": "Validate Secret and Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "beauty_users",
+        "updateKey": "idempotency_key",
+        "fields": "idempotency_key,organization,user,event,synced_at",
+        "upsert": true
+      },
+      "id": "mongo-upsert-user",
+      "name": "MongoDB Upsert User",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [520, 0],
+      "credentials": {
+        "mongoDb": {
+          "id": "REPLACE_WITH_N8N_MONGODB_CREDENTIAL_ID",
+          "name": "MongoDB Beauty SaaS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, idempotency_key: $json.idempotency_key, synced_at: $json.synced_at } }}"
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [780, 0]
+    }
+  ],
+  "connections": {
+    "Webhook - User Sync": { "main": [[{ "node": "Validate Secret and Payload", "type": "main", "index": 0 }]] },
+    "Validate Secret and Payload": { "main": [[{ "node": "MongoDB Upsert User", "type": "main", "index": 0 }]] },
+    "MongoDB Upsert User": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

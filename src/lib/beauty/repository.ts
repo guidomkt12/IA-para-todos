@@ -20,6 +20,7 @@ export async function createOrganization(input: { name: string; slug: string; bu
   if (memberError) throw memberError;
   await db.from("organization_settings").insert({ organization_id: organization.id });
   await db.from("onboarding_progress").insert({ organization_id: organization.id, current_step: "unidade", completed_steps: ["empresa"] });
+  await supabase.functions.invoke("mongo-user-sync", { body: { organization_id: organization.id } }).catch(() => undefined);
   return organization;
 }
 
